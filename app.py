@@ -1,48 +1,36 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from config import Config
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from extensions import db
 
+# --- Application Initialization ---
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config.from_object(Config)
 
-db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True, nullable=False)
-    email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
-    role = db.Column(db.String(50), default='user')
-    full_name = db.Column(db.String(150), nullable=True)
-    phone = db.Column(db.String(15), nullable=True)
-    age = db.Column(db.Integer, nullable=True)
+# Now, import the models. They can safely import the `db` object from this file.
+from models import User, Log
 
-    @staticmethod
-    def hash_password(password):
-        return generate_password_hash(password)
+# Initialize the db with the app instance
+db.init_app(app)
 
-    def verify_password(self, password):
-        return check_password_hash(self.password, password)
-
-class Log(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    action = db.Column(db.String(200), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    ip_address = db.Column(db.String(100), nullable=True)
-    user_agent = db.Column(db.String(300), nullable=True)
-    user = db.relationship('User', backref=db.backref('logs', lazy=True))
-
+# --- Login Manager Callback ---
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# --- Helper Functions ---
+def log_activity(user, action):
+    log = Log(user_id=user.id, action=action, ip_address=request.remote_addr, user_agent=request.headers.get('User-Agent'))
+    db.session.add(log)
+    db.session.commit()
+
+# --- Routes (Unchanged) ---
 @app.route('/')
 @login_required
 def home():
@@ -141,7 +129,6 @@ def login():
             flash('Invalid username or password.', 'danger')
     return render_template('login.html')
 
-
 @app.route('/logout')
 @login_required
 def logout():
@@ -149,11 +136,6 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'success')
     return redirect(url_for('login'))
-
-def log_activity(user, action):
-    log = Log(user_id=user.id, action=action, ip_address=request.remote_addr, user_agent=request.headers.get('User-Agent'))
-    db.session.add(log)
-    db.session.commit()
 
 if __name__ == '__main__':
     with app.app_context():

@@ -1,40 +1,34 @@
 from flask_sqlalchemy import SQLAlchemy
-from flask_bcrypt import Bcrypt
 from flask_login import UserMixin, LoginManager
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+from extensions import db
 
-db = SQLAlchemy()
-bcrypt = Bcrypt()
-login_manager = LoginManager()
+# The LoginManager and Bcrypt are initialized in app.py, so we don't need to do it here
+# Just import the classes if needed.
 
-class User(db.Model, UserMixin):
+class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(128), nullable=False)
-    role = db.Column(db.String(20), default='user')  # 'user' or 'admin'
-    full_name = db.Column(db.String(100))
-    phone = db.Column(db.String(15))
-    age = db.Column(db.Integer)
-    logs = db.relationship('Log', backref='user', lazy=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    email = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+    role = db.Column(db.String(50), default='user')
+    full_name = db.Column(db.String(150), nullable=True)
+    phone = db.Column(db.String(15), nullable=True)
+    age = db.Column(db.Integer, nullable=True)
 
     @staticmethod
     def hash_password(password):
-        return bcrypt.generate_password_hash(password).decode('utf-8')
+        return generate_password_hash(password)
 
     def verify_password(self, password):
-        return bcrypt.check_password_hash(self.password, password)
-
-
+        return check_password_hash(self.password, password)
 
 class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    action = db.Column(db.String(255), nullable=False)
-    timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
-    ip_address = db.Column(db.String(100))
-    user_agent = db.Column(db.String(255))
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+    action = db.Column(db.String(200), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    ip_address = db.Column(db.String(100), nullable=True)
+    user_agent = db.Column(db.String(300), nullable=True)
+    user = db.relationship('User', backref=db.backref('logs', lazy=True))
